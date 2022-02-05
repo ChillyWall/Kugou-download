@@ -157,7 +157,46 @@ def make_dir(dir: str):
         os.mkdir(dir)
 
 
-def run_all(url: str='', save_info: bool=True , info_from_file: bool=False, info_file: str='./songs.json', number: int = 5, output_file: str = './songs.json', output_dir: str = './'):
+def encode_lrc_all(music_dir: str, from_enc: str = 'utf-8', to_enc: str = 'gbk'):
+    files = []
+    for root, dirs, file_names in os.walk(music_dir):
+        for file_name in file_names:
+            if os.path.splitext(file_name)[-1] == '.lrc':
+                file = {'name': file_name}
+                file['path'] = os.path.join(root, file_name)
+
+                files.append(file)
+            else:
+                pass
+
+    for file in files:
+        dir = os.path.split(file['path'])[0]
+        dir = os.path.split(dir)[1]
+        file['dir'] = dir
+
+    for file in files:
+        dir = os.path.join(music_dir, file['dir'])
+        file_path = os.path.join(dir, file['name'])
+
+        with open(file['path'], 'r', encoding=from_enc, errors='ignore') as f:
+            text = f.read()
+
+        with open(file_path, 'w', encoding=to_enc, errors='ignore') as f:
+            f.write(text)
+
+
+def encode_lrc(output_dir: str, from_enc: str = 'utf-8', to_enc: str = 'gbk'):
+    for file in os.listdir(output_dir):
+        if os.path.splitext(file)[-1] == '.lrc':
+            path = os.path.join(output_dir, file)
+            with open(path, 'r', encoding=from_enc, errors='ignore') as f:
+                text = f.read()
+
+            with open(path, 'w', encoding=to_enc, errors='ignore') as f:
+                f.write(text)
+
+
+def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: bool=False, info_file: str='./songs.json', number: int = 5, output_file: str = './songs.json', output_dir: str = './', encode_lrc: bool=True):
     """To download in one key.
 
     Args:
@@ -174,23 +213,44 @@ def run_all(url: str='', save_info: bool=True , info_from_file: bool=False, info
         output_dir (str, optional): The directory containing the output. Defaults to './'.
     """
     if url:
-        print('geting the information---------')
+        print('Geting the information---------')
         songs = get_info(url)
-        print('done!\n\n')
+        print('Done!\n\n')
 
         if save_info:
-            print('saving the information-----------')
+            print('Saving the information-----------')
             save_all(songs, output_file)
-            print('done!')
+            print('Done!')
 
     elif info_from_file:
         with open(info_file, 'r', encoding='utf-8') as file:
             songs = json.loads(file.read())
 
-    print('saving the lrc---------------------')
+    print('Saving the lrc---------------------')
     save_lrc(songs['lrc'], output_dir)
-    print('done')
+    print('Done')
 
-    print('downloading---------------------')
-    multiprocessing_download(songs['info'], number, output_dir)
-    print('done!')
+    if encode_lrc:
+        print('Encoding the lrc files------------')
+        encode_lrc(output_dir)
+        print('Done!')
+
+    print('Downloading---------------------')
+    if by_step:
+        ids = range(by_step + 1)
+        song_lists = []
+
+        count = int(len(songs['info']) / by_step)
+        for n in ids:
+            if n == by_step:
+                index = n * count
+                songs_downloaded = songs['info'][index:]
+            else:
+                index = [n * count, (n + 1) * count]
+                songs_downloaded = songs['info'][index[0]:index[1]]
+            song_lists.append(songs_downloaded)
+
+        for n in range(by_step + 1):
+            multiprocessing_download(song_lists[n], output=output_dir)
+
+    print('Done!')
