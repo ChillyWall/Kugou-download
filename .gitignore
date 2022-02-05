@@ -1,6 +1,7 @@
 music/
 __pycache__
 .vscode/
-kugou.ipynb
 README.html
 data/
+*.lrc
+*.mp3

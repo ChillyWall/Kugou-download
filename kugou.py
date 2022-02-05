@@ -196,7 +196,7 @@ def encode_lrc(output_dir: str, from_enc: str = 'utf-8', to_enc: str = 'gbk'):
                 f.write(text)
 
 
-def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: bool=False, info_file: str='./songs.json', number: int = 5, output_file: str = './songs.json', output_dir: str = './', encode_lrc: bool=True):
+def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: bool=False, info_file: str='./songs.json', number: int = 5, output_file: str = './songs.json', output_dir: str = './', if_encode_lrc: bool=True):
     """To download in one key.
 
     Args:
@@ -230,7 +230,7 @@ def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: 
     save_lrc(songs['lrc'], output_dir)
     print('Done')
 
-    if encode_lrc:
+    if if_encode_lrc:
         print('Encoding the lrc files------------')
         encode_lrc(output_dir)
         print('Done!')
@@ -252,5 +252,6 @@ def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: 
 
         for n in range(by_step + 1):
             multiprocessing_download(song_lists[n], output=output_dir)
-
+    else:
+        multiprocessing_download(songs['info'], number, output_dir)
     print('Done!')
