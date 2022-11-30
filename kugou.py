@@ -1,10 +1,15 @@
 import re
 from bs4 import BeautifulSoup
-import urllib.request
+import requests
 import threading
 import os
 import json
 
+def make_dir(dir: str):
+    if os.path.exists(dir):
+        pass
+    else:
+        os.mkdir(dir)
 
 def get_info(url: str):
     """To get the infomation of every song included in the song list.
@@ -16,15 +21,15 @@ def get_info(url: str):
         list: In this list every song included in the song list is contained as a dictionary consisting of three keys, title, lrc, and url.
     """
     print('Opening the web page')
-    soup = BeautifulSoup(urllib.request.urlopen(url), 'html.parser')
+
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:107.0) Gecko/20100101 Firefox/107.0'}
+    soup = BeautifulSoup(requests.get(url, headers=headers).text, 'html.parser')
 
     # the regex
     hash_regex = re.compile('"hash":"([0-9A-Za-z]*)",')
     album_id_regex = re.compile('"album_id":([0-9]*),')
-    mixsong_id_regex = re.compile('"mixsongid":([0-9]*)')
-    song_link_regex = re.compile(
-        'https://www.kugou.com/mixsong/[0-9A-Za-z]*.html')
-    baned_char = re.compile(r'[\?\$\*\/\\"\';,\|:]')
+    song_link_regex = re.compile('https://www.kugou.com/mixsong/[0-9A-Za-z]*.html')
+    data_regex = re.compile(r'jQuery.*?[({].*?"data":(.*?)}[)]', re.S)
 
     # the links of every song in the song list
     links = soup.find_all('a', {'class': '', 'id': '', 'href': song_link_regex})
@@ -32,34 +37,42 @@ def get_info(url: str):
     # get the information including name, lrc, and url of the song
     songs_info = []
     songs_lrc = []
-    print('Geting the info and lrc')
+
+    print('Getting the info and lrc')
+
     for link in links:
-        song_soup = BeautifulSoup(urllib.request.urlopen(link['href']), 'html.parser')
+        text = requests.get(link['href'], headers=headers).text
+        song_soup = BeautifulSoup(text, 'html.parser')
         script = str(song_soup.script.string)
+
         try:
             song_hash = hash_regex.search(script).group(1)
             album_id = album_id_regex.search(script).group(1)
-            mixsong_id = mixsong_id_regex.search(script).group(1)
+
+            data_url = f"https://wwwapi.kugou.com/yy/index.php?r=play/getdata&callback=jQuery191053318263960215_1626866592344&hash={song_hash}&dfid=1tXkst0i97Rq4RW0pz15GjrP&mid=3196606d7d3ff0207a473da58e0b44b3&platid=4&album_id={album_id}&_=1626866592346"
+            resp = requests.get(data_url, headers=headers).text
+            data_text = data_regex.findall(resp)[0]
+            data = json.loads(data_text)
+
+            title = data['song_name']
+            lrc = data['lyrics']
+            song_url = data['play_url']
+
+            song_info = {
+                'title': title,
+                'url': song_url
+            }
+
+            song_lrc = {
+                'title': title,
+                'lrc': lrc
+            }
+
+            songs_info.append(song_info)
+            songs_lrc.append(song_lrc)
+
         except AttributeError:
-            pass
-
-        song_url = '{0}#hash={1}&album_id={2}&album_audio_id={3}'.format(
-            link['href'], song_hash, album_id, mixsong_id)
-        lrc = song_soup.find('div', attrs={'class': 'displayNone'}).string
-        title = re.sub(baned_char, '_', link['title'])
-
-        song_info = {
-            'title': title,
-            'url': song_url
-        }
-
-        song_lrc = {
-            'title': title,
-            'lrc': lrc
-        }
-
-        songs_info.append(song_info)
-        songs_lrc.append(song_lrc)
+            continue
 
     songs = {
         'info': songs_info,
@@ -83,7 +96,7 @@ def save_lrc(songs: list, output_dir: str='./lrc/'):
             file.write(song['lrc'])
 
 
-def save_all(songs: list, file: str='./songs.json'):
+def save_all(songs: list, file: str='./songs/songs.json'):
     text = json.dumps(songs, indent=4)
     with open(file, 'w', encoding='utf-8') as file:
         file.write(text)
@@ -105,18 +118,22 @@ def read_info(file: str):
     return songs
 
 
-def download(songs: list, output: str = './'):
+def download(songs: list, output: str = './songs/'):
     """利用you-get下载音乐
 
     Args:
         songs (list): the list containing the songs
         output (str, optional): the directory containing the output. Defaults to './'.
     """
+
     make_dir(output)
     for song in songs:
         title = song['title']
         url = song['url']
-        os.system('you-get -o {0} -O "{1}" "{2}"'.format(output, title, url))
+        path = os.path.join(output, f'{title}.mp3')
+        content = requests.get(url).content
+        with open(path, 'wb') as f:
+            f.write(content)
 
 
 def multiprocessing_download(songs: list, number: int = 5, output: str = './'):
@@ -148,13 +165,6 @@ def multiprocessing_download(songs: list, number: int = 5, output: str = './'):
 
     for process in processes:
         process.join()
-
-
-def make_dir(dir: str):
-    if os.path.exists(dir):
-        pass
-    else:
-        os.mkdir(dir)
 
 
 def encode_lrc_all(music_dir: str, from_enc: str = 'utf-8', to_enc: str = 'gbk'):
@@ -196,7 +206,7 @@ def encode_lrc(output_dir: str, from_enc: str = 'utf-8', to_enc: str = 'gbk'):
                 f.write(text)
 
 
-def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: bool=False, info_file: str='./songs.json', number: int = 5, output_file: str = './songs.json', output_dir: str = './', if_encode_lrc: bool=True):
+def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: bool=False, info_file: str='./songs/songs.json', number: int = 5, output_file: str = './songs/songs.json', output_dir: str = './songs/', if_encode_lrc: bool=False):
     """To download in one key.
 
     Args:
@@ -210,12 +220,14 @@ def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: 
         
         output_file (str, optional): If the parameter save_info is True, this will be json file containing the infomation of songs. Defaults to './songs.json'.
 
-        output_dir (str, optional): The directory containing the output. Defaults to './'.
+        output_dir (str, optional): The directory containing the output. Defaults to './songs/'.
     """
+
     if url:
         print('Geting the information---------')
         songs = get_info(url)
         print('Done!\n\n')
+        make_dir(output_dir)
 
         if save_info:
             print('Saving the information-----------')
@@ -225,7 +237,7 @@ def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: 
     elif info_from_file:
         with open(info_file, 'r', encoding='utf-8') as file:
             songs = json.loads(file.read())
-
+    
     print('Saving the lrc---------------------')
     save_lrc(songs['lrc'], output_dir)
     print('Done')
@@ -255,3 +267,6 @@ def run_all(url: str='', by_step: int=0, save_info: bool=True , info_from_file: 
     else:
         multiprocessing_download(songs['info'], number, output_dir)
     print('Done!')
+
+if __name__ == '__main__':
+    run_all('https://www.kugou.com/yy/special/single/5244430.html')
