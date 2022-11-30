@@ -1,7 +1,6 @@
-music/
+songs/
 __pycache__
 .vscode/
 README.html
-data/
 *.lrc
 *.mp3
